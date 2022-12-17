@@ -1,0 +1,707 @@
+\documentclass[italian, oneside]{sapthesis} %oneside? Levarlo aggiunge pagine mettendo una pagina bianca prima di ogni capitolo se questo non compare su pagina dispari
+\usepackage[italian]{babel}
+\usepackage[utf8]{inputenx}
+\usepackage{indentfirst}
+\usepackage{microtype}
+\usepackage[nottoc, notlof, notlot]{tocbibind}
+\usepackage{setspace}
+\onehalfspacing
+
+%\usepackage{palatino}
+%\counterwithout{footnote}{chapter}
+\usepackage{hyperref}
+\hypersetup{	
+			colorlinks=true,
+			linkcolor=black,
+            linktoc=page,
+			anchorcolor=black,
+			citecolor=black,
+			urlcolor=black,
+			pdftitle={Sviluppo di test automatizzati per applicazione di smart parking},
+			pdfauthor={Riccardo Mancini},
+			pdfkeywords={thesis, sapienza, roma, university}
+ }
+
+\usepackage{listings}
+\usepackage{color}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{frame=tb,
+  language=Go,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\title{Sviluppo di test automatizzati per applicazione di smart parking}
+\author{Riccardo Mancini}
+\IDnumber{1905638}
+\course{Informatica}
+\courseorganizer{Facolt\`a di ingegneria dell'informazione, informatica e statistica}
+\submitdate{2021/2022}
+\copyyear{2022}
+\advisor{Prof. Emanuele Panizzi}
+\authoremail{mancini.1905638@studenti.uniroma1.it}
+% \examdate{22 September 2015}
+% \examiner{Prof. ...} \examiner{Prof. ...} \examiner{Prof. ...}  \examiner{Prof. ...}  \examiner{Prof. ...} \examiner{Prof. ...}  \examiner{Prof. ...} 
+
+
+%we refer to http://ctan.mirrorcatalogs.com/macros/latex/contrib/sapthesis/sapthesis-doc.pdf for an exhaustive description of the sapthesis documentclass.
+
+
+\begin{document}
+
+\frontmatter
+\maketitle{}
+
+
+%\dedication{ A Vino98, FrankIsZed e Hornn Pub, che mi hanno instancabilmente aiutato a prepararmi alla discussione di laurea }
+
+\begin{abstract}
+	Il seguente elaborato presenta il mio percorso di tirocinio svolto presso il Dipartimento di Informatica dell'università di Roma La Sapienza.
+
+	Durante il periodo del mio tirocinio ho partecipato allo sviluppo del lato back-end dell'applicazione di smart parking GeneroCity. In particolare mi sono concentrato sulla manutenibilit\'a del codice gi\'a esistente, sviluppando test automatizzati e scrivendone la documentazione. Dopo una prima introduzione e una spiegazione della struttura del back-end di GeneroCity, parler\`o del lavoro svolto suddiviso per argomenti.
+\end{abstract}
+
+\tableofcontents
+\mainmatter
+% -------------
+% CHAPTER 1
+% -------------
+\chapter{Introduzione}
+	\section{GeneroCity}
+		GeneroCity \`e un'applicazione di smart parking che cerca di rendere pi\'u facile trovare parcheggio ai suoi utenti. 
+		L'applicazione riesce ad accorgersi quando un utente sta lasciando il proprio parcheggio, sia automaticamente, sia tramite segnalazione manuale (l'utente prende il ruolo di \textit{giver}). Allo stesso modo pu\`o capire se l'utente sta cercando parcheggio (e quindi sta assumendo il ruolo di \textit{taker}).
+
+		Se il sistema trova un giver e un taker nella stessa area, esegue un \textit{match} e li mette in contatto, permettendo al taker di sapere preventivamente dove andare, risparmiando tempo e carburante. 
+		
+		Inoltre l'applicazione \`e dotata di un sistema interno in base al quale per assumere il ruolo di taker si devono spendere delle monete virtuali, che \`e possibile guadagnare solo portando a buon fine i match come giver. Questo fa s\'i che tutti siano incentivati a fornire indicazioni sui posti che si stanno liberando, oltre che a riceverle.
+
+	\section{Situazione iniziale}
+		All'inizio del mio tirocinio il lato server dell'applicazione era gi\'a in una fase avanzata dello sviluppo, con la maggior parte delle chiamate API gi\'a implementate.
+
+		Era bene quindi cominciare a concentrarsi sulla manutenibilit\'a del codice, in modo da facilitarne il proseguimento dello sviluppo, apportando alcune modifiche e miglioramenti:
+		\begin{itemize}
+		\item Semplificare parti che erano state modificate pi\'u volte e che perci\`o erano diventate in molti casi pi\'u complicate di quanto servisse
+		\item Scrivere dei commenti dettagliati per permettere in futuro, ad altri sviluppatori, di capire rapidamente il significato e lo scopo del codice  e quindi  di apportare modifiche pi\'u velocemente e facilmente, se necessario
+		\item Creare dei test automatizzati per scovare errori difficili da individuare attraverso un uso abituale dell'applicazione, e per evitare di introdurne inconsapevolmente di nuovi durante un'eventuale modifica del codice
+		\end{itemize}
+
+		Inoltre, come esercizio per familiarizzare con il codice, mi \`e stato chiesto di implementare una coppia di richieste API per salvare ed ottenere le statistiche sull'uso medio del carburante della propria macchina.
+
+% -------------
+% CHAPTER 2
+% -------------
+\chapter{Struttura back-end di GeneroCity}
+	\begin{figure}[h]
+		\makebox[\textwidth][c]{\includegraphics[width=1.2\textwidth]{backend-gc.png}}
+		\captionsetup{justification=centering}
+		\caption{Diagramma della struttura del back-end di GeneroCity}
+		\label{fig:key}
+	\end{figure}
+	
+	\pagebreak
+
+	Il codice del lato server di GeneroCity \`e costituito da due parti principali, rappresentate da due interfacce:
+	\begin{itemize}
+		\item Router
+		\item AppDatabase
+	\end{itemize}
+
+	Il Router contiene al suo interno un Logger, che come suggerisce il nome permette di salvare i log di ogni evento ed errore, un Push Notification System, che permette di inviare notifiche push agli smartphone che hanno l'applicazione di GeneroCity installata, un oggetto che rappresenta una connessione ad un server MinIO, e un Handler.
+
+	Inoltre il Router implementa un metodo per ogni chiamata API esistente, e contiene un'interfaccia AppDatabase. Questa a sua volta contiene un oggetto che rappresenta la connessione con il database di GeneroCity, e implementa un metodo per ogni tipo di interazione con il database, che nella maggior parte dei casi coincide con una chiamata API.
+
+	\paragraph*{}
+	L'Handler riceve le richieste http e, in base alla chiamata API che sta venendo effettuata, esegue il metodo del Router corrispondente. Per esempio se riceve una richiesta "PUT /car/{car\_id}/park", che serve a registrare un parcheggio sul server, chiama la funzione "Park-car" del Router, che si occupa di effettuare tale operazione.
+
+	I metodi del Router a loro volta chiamano i metodi dell'AppDatabase che si occupano di effettuare le operazioni necessarie nel database. Contiunando l'esempio del parcheggio: la funzione "Park-car" del Router chiama il metodo "Is-owner" dell'AppDatabase che interroga il database per assicurarsi che l'utente che ha effettuato la richiesta sia il proprietario della macchina, e cio\`e sia abilitato ad eseguire questa operazione. Successivamente chiama anche il metodo "Park-car" dell'AppDatabase, che esegue le query necessarie a salvare le informazioni sul parcheggio nel database.
+	
+	\paragraph*{}
+	Inoltre alcune chiamate API salvano dei dati in un'istanza di MinIO, perci\`o i metodi del Router relativi interagiscono con l'oggetto che rappresenta la connessione al server MinIO.
+
+	\section*{MinIO}
+	MinIO \`e un High Performance Object Storage distribuito sotto la GNU Affero General Public License, compatibile con Amazon S3. Pu\`o manipolare dati non strutturati come foto, video e log files\cite{ref:minio}. \`E costituito da tre componenti: server, client e client SDK.
+	
+	Il server \`e progettato per essere minimale e scalabile, ed \`e abbastanza leggero da poter essere raggruppato insieme allo stack applicativo. Pu\`o inoltre essere installato sia su macchine fisiche che virtuali, o lanciato come container docker.
+
+	Il client \`e compatibile con tutti i servizi di cloud storage compatibili con Amazon S3, e il client SDK offre una API, implementata in diversi linguaggi, per potersi infacciare con tali servizi. 
+
+
+% -------------
+% CHAPTER 3
+% -------------
+\chapter{Semplificazione del codice}
+	\section{Park/Unpark}
+		\subsection{Funzionamento}
+		Una delle parti pi\'u importanti del server di GeneroCity \`e quella che si occupa di salvare nel database le informazioni di ogni evento di parcheggio (\textit{park}) e dell'associato evento di lasciare il parcheggio (\textit{unpark}).
+		
+		Quando un utente parcheggia la propria macchina e l'applicazione se ne accorge (sia automaticamente, sia tramite segnalazione manuale dell'utente), questa invia una richiesta al server di GeneroCity. La richiesta contiene tutte le informazioni del parcheggio: il codice identificativo del guidatore e della macchina, la data e ora del parcheggio, la posizione, il tipo di parcheggio ed altre informazioni usate per calcolare varie statistiche, come il tempo impiegato a trovare parcheggio. Inoltre la richiesta pu\`o includere i dati relativi al viaggio appena concluso, e alle manovre fatte durante l'operazione di parcheggio.
+
+		Il server si occupa quindi di salvare le informazioni del parcheggio nel database, e i dati sul viaggio e sulle manovre in un'istanza di MinIO. Successivamente salva nelle tabelle apposite le statistiche aggiornate relative alla macchina e all'utente che hanno eseguito il parcheggio, come il numero totale di parcheggi effettuati e il tempo medio passato a cercare un parcheggio.
+
+		Allo stesso modo, quando l'utente esegue un \textit{unpark}, l'applicazione invia una richiesta al server, che aggiunge le relative informazioni nel database.
+
+		\subsection{Modifiche apportate}
+		Al momento dell'inizio del mio tirocinio i \textit{park} e \textit{unpark} venivano registrati nella stessa tabella del database, in modo da facilitare le operazioni che richiedevano i dati di entrambi. 
+		
+		Ogni evento \textit{unpark} prevedeva un record distinto da quello del \textit{park} ad esso associato, con l'aggiunta per\`o di una colonna apposita che permettesse di riconoscere quel record come evento \textit{unpark}. In questo modo per\`o risultava che molte informazioni nel record dell'\textit{unpark} venivano duplicate, come ad esempio l'id della macchina, il tipo del parcheggio e la posizione, o addirittura non erano applicabili, come l'informazione sul tempo impiegato per trovare parcheggio.
+
+		Questo si e' rivelato ovviamente poco efficiente sia in termini di occupazione dello spazio nel database che di efficienza: infatti anche query molto semplici, come il richiedere tutti i parcheggi di una macchina, dovevano lavorare sul doppio dei record.
+		
+		\begin{figure}[h]
+			\makebox[\textwidth][c]{\includegraphics[width=1.2\textwidth]{db-pre-merge.png}}
+			\caption{Organizzazione dei record prima delle modifiche apportate}
+			\label{fig:1}
+		  \end{figure}
+
+		\paragraph*{}
+		La soluzione quindi \`e stata quella unire nello stesso record le informazioni relative agli eventi \textit{park} e \textit{unpark} associati, aggiungendo le colonne "unparktime" e "unparkedby": in questo modo, per sapere se una macchina \`e ancora parcheggiata o ha lasciato libero il posto, \`e sufficiente controllare se il valore della colonna "unparktime" \`e NULL oppure no. Questo ha permesso di rimuovere la colonna "parkstatus", necessaria a distinguere il ruolo di ogni record (\textit{park} o \textit{unpark}).
+
+		\begin{figure}[h]
+			\makebox[\textwidth][c]{\includegraphics[width=1.2\textwidth]{db-after-merge.png}}
+			\caption{Organizzazione dei record dopo le modifiche apportate}
+			\label{fig:2}
+		\end{figure}
+
+		Ovviamente \`e stato necessario aggiornare tutte le query che andavano ad interrogare la tabella dei parcheggi per recepire i cambiamenti effettuati.
+
+		\pagebreak
+		\subsection{Script di migrazione dati}
+		Avendo modificato la struttura del database, \`e stato necessario creare uno script che migrasse le vecchie informazioni nel nuovo formato. Questo semplice script raccoglie per ogni macchina tutti i suoi \textit{park} e \textit{unpark}, e per ogni riga di \textit{unpark}, dopo aver spostato le sue informazioni nella riga del \textit{park} corrispondente, la elimina.
+
+		\begin{figure}[h]
+			\begin{center}
+				\includegraphics[width=0.8\textwidth]{park-migration-script.png}
+			\end{center}
+			\caption{Script di migrazione dati}
+			\label{fig:3}
+		\end{figure}
+
+		Questo script per poter funzionare ha bisogno della colonna "parkstatus" nella tabella dei parcheggi, che specifica se un record \`e un park o un unpark. Perci\`o \`e stato necessario aggiungere al database le due colonne per le informazioni sull'unpark, poi eseguire lo script, e solo successivamente si \`e potuto modificare nuovamente il database per rimuovere la colonna "parkstatus".
+		
+	
+	\section{Unificazione delle structs}
+		Per manipolare i dati ottenuti dalle interrogazioni del database, vengono usate delle struct, che si possono definire come collezioni di variabili.
+
+		Poich\'e il codice \`e stato scritto a pi\'u riprese da diverse persone, il numero di struct usate per rappresentare vari tipi di dati era diventato molto alto, nonostante molte di queste rappresentassero spesso la stessa cosa.
+		Mi \`e stato quindi chiesto di sostituire tutte le strutture duplicate con un'unica struct, leggermente pi\'u generalizzata.
+
+		Erano presenti due gruppi di struct da unificare:
+		\begin{itemize}
+			\item Quelle che si occupavano delle informazioni su un determinato parcheggio
+			\item Quelle che si occupavano delle informazioni su una macchina e sul suo stato
+		\end{itemize}
+
+		Spesso le informazioni contenute nelle varie struct appartenenti allo stesso gruppo risultavano replicate, con pochissime differenze; pi\'u precisamente nel codice era gi\'a presente per ognuno dei due gruppi una struct "principale" che conteneva molti campi, e diverse struct pi\'u piccole che erano composte da un sottoinsieme di questi. In rari casi le struct pi\'u piccole avevano anche uno o due campi non presenti nella struct principale. Ho quindi eliminato le pi\'u piccole sostituendole con quelle principali, alle quali ho aggiunto i pochi campi in pi\'u.
+
+% -------------
+% CHAPTER 4
+% -------------
+\chapter{Documentazione in linea}
+	Nonostante fosse gi\'a presente una documentazione fatta con ApiDoc, questa andava solo a spiegare a grandi linee il compito di ogni chiamata API, elencando gli argomenti da inserire nella richiesta e quelli che si ricevono nella risposta.
+
+	Ci\`o \`e sufficiente solo per chi si occupa dello sviluppo nel lato front-end, ma completamente inadeguato per chi invece lavora sul codice del server, perch\'e non fornisce indicazioni esaustive su come le API lavorano al loro interno.
+
+	Per questo motivo ho ritenuto opportuno scrivere una documentazione in linea (commenti) che permettesse, a chi in futuro dovesse apportare delle modifiche o integrazioni al codice, di capire in modo veloce come farlo.
+
+	\section{Importanza dei commenti}
+		I commenti sono uno degli strumenti che contribuiscono maggiormente alla mantenibilit\'a del codice. A volte pu\`o risultare molto difficile capire cosa sta cercando di fare un frammento di codice, o perch\'e non siamo stati noi a scriverlo, o perch\'e \`e passato molto tempo da quando l'abbiamo scritto.
+		
+		\`E di fondamentale importanza quindi scrivere dei commenti esaustivi, che rendano il codice pi\'u chiaro e leggibile, spieghino i motivi che hanno portato a prendere delle decisioni non ovvie, avvertano di possibili side effects, e permettano di comprendere parti di codice che hanno una logica complicata.
+
+		In assenza di tale documentazione si rischia di non essere in grado di decifrare il codice in tempi rapidi o di fraintenderne gli obiettivi e addirittura di prendere decisioni che erano state evitate in partenza per motivi validi ma non immediatamente evidenti.
+
+	\section{Tipi di commenti}
+		I commenti si possono distinguere in due macro categorie: quelli che si occupano di spiegare cosa sta facendo un frammento di codice, e quelli che spiegano il perch\'e un frammento di codice sta facendo qualcosa.
+
+		Nella prima categoria sono presenti i seguenti tipi di commenti: 
+		\begin{itemize}
+			\item Commenti di funzioni
+			\item Commenti teorici
+			\item Commenti guida
+		\end{itemize}
+
+		\paragraph*{Commenti di funzioni} Spiegano il funzionamento di intere funzioni, e servono quindi ad evitare allo sviluppatore di dover leggerne tutto il corpo prima di poter capire a cosa servono. 
+		\begin{lstlisting}
+// ParkCar inserts the given park information in the database, 
+// and it returns the id of the newly created park.
+// If the car was not unparked before this request, ParkCar 
+// returns a types.DUPLICATE_PARK message instead.
+// After inserting park information, it creates a new trip in the
+// database, and it updates all matches without parkid
+// made by the car and driver since the car's last park
+func (db *appdbimpl) ParkCar(carPark types.ParkInfo) (int64, int, error) {...}
+		\end{lstlisting}
+
+		\paragraph*{Commenti teorici} Spiegano concetti che potrebbero essere al di fuori delle conoscenze dello sviluppatore, ma che sono fondamentali per capire cosa sta facendo un frammento di codice. Per esempio possono spiegare la teoria che sta dietro alcune funzioni matematiche particolarmente complesse.
+		
+		\paragraph*{Commenti guida} Sono commenti che potrebbero sembrare inutili, visto che non servono a spiegare qualcosa che non \`e chiaro o i motivi delle scelte fatte. Si limitano a descrivere cosa fa un frammento di codice, in modo da rendere pi\'u facile e veloce allo sviluppatore leggerlo. Dividono quindi il codice in blocchi pi\'u leggibili, e lo rendono pi\'u ordinato, dandogli un ritmo definito. Non devono per\`o trasformarsi in commenti banali, che descrivono cose talmente ovvie da non avere bisogno di essere commentate.
+
+		Esempio di commento banale:
+		\begin{lstlisting}
+	count += 1; // Increase counter by one
+		\end{lstlisting}
+
+		\pagebreak
+		Esempio di commento guida:
+		\begin{lstlisting}
+	// Insert park information in database, send error response if
+	// car was not unparked before request
+	// or if given park time is older than last unpark
+	parkId, message, err := rt.db.ParkCar(carPark)
+	if err != nil {...
+		errorMessage.ErrorMessage = "can't insert carpark"
+		...
+	} else if message == types.DUPLICATE_PARK {...
+		errorMessage.ErrorMessage = "can't park without having unparked first"
+		...
+	} else if message == types.PARK_TIME_INVALID {...
+		errorMessage.ErrorMessage = "given park time older than last park/unpark"
+		...
+	}
+		\end{lstlisting}
+
+		Alla seconda categoria appartengono: 
+		\begin{itemize}
+			\item Commenti di progettazione
+			\item Commenti di motivazione
+		\end{itemize}
+
+		\paragraph*{Commenti di progettazione} Aiutano a far capire come il codice \`e stato progettato, descrivendo le tecniche usate e come e perch\'e vengono usati certi algoritmi. Sono una versione pi\'u ad alto livello dei Function comments, e sono di solito usati per descrivere grandi parti di codice.
+
+		\paragraph*{Commenti di motivazione} Si occupano di spiegare perch\'e il codice sta facendo qualcosa. Aiutano chi sta leggendo a capire come mai il codice sta eseguendo azioni che potrebbero sembrare inutili o addirittura sbagliate, se non se ne conoscono le ragioni.
+		\begin{lstlisting}
+	// If last park doesn't have an unpark time, it means the 
+	// car is not unparked, so it cannot be parked again.
+	else if parkInfo.UnparkTime == nil {
+	_ = tx.Rollback()
+	return 0, types.DUPLICATE_PARK, nil
+		\end{lstlisting}
+	
+	\section{Commenti usati}
+		Ho iniziato scrivendo i commenti di funzione per tutte le funzioni pi\'u importanti, in modo da poter spiegare ogni funzione a cosa serve, e come \`e implementata a grandi linee. Successivamente ho cominciato ad aggiungere i commenti guida, rendendo molto pi\'u leggibile tutta la codebase. Infatti, a causa delle molte linee di codice usate per fare error checking, spesso il codice rischiava di diventare confusionario. Infine ho aggiunto alcuni commenti di motivazione per spiegare come mai erano state fatte alcune scelte.
+
+
+% -------------
+% CHAPTER 5
+% -------------
+\chapter{Chiamate API implementate}
+	Durante il periodo del mio tirocinio mi \`e stato chiesto di implementare due chiamate API per ottenere e aggiornare le statistiche sul consumo di carburante medio di una macchina.
+	Le chiamate sono le seguenti:
+	\begin{itemize}
+		\item GetAvgRefuel
+		\item UpdateAvgRefuel
+	\end{itemize}
+
+	\paragraph*{GetAvgRefuel} Restituisce il numero di rifornimenti effettuati, la data dell'ultimo rifornimento, e la distanza media percorsa e il tempo medio trascorso tra due rifornimenti.
+
+	\paragraph*{UpdateAvgRefuel} \`E progettata per essere effettuata ad ogni rifornimento, in modo da poter aggiornare le statistiche con i dati raccolti dall'ultimo rifornimento.
+
+	L'equazione utilizzata per calcolare le nuove medie della distanza percorsa e del tempo trascorso \`e la seguente:
+
+	\[m_n=\frac{(n-1)m_{n-1}+a_n}{n}\]
+
+	dove:
+	\begin{itemize}
+		\item \(m_n\): nuova media da calcolare
+		\item \(m_{n-1}\): media precedente
+		\item  \(a_n\): distanza percorsa (o tempo passato) dall'ultimo rifornimento
+		\item \(n\): numero totale di rifornimenti effettuati
+	\end{itemize}
+
+	UpdateAvgRefuel riceve nel body della richiesta un oggetto json contenente la data del rifornimento corrente e la distanza percorsa dall'ultimo rifornimento. Dalla data ricevuta e quella presente nel database relativa al rifornimento precedente pu\`o calcolare il tempo passato da quest'ultimo. Con queste informazioni, le vecchie medie e il numero di rifornimenti fatti pu\`o calcolare le nuove medie, che andr\'a a salvare nel database insieme alla data ricevuta nella richiesta.
+
+
+% -------------
+% CHAPTER 6
+% -------------
+\chapter{Test automatizzati}
+	L'argomento principale del mio tirocinio \`e stato lo sviluppo di test automatizzati per l'api di GeneroCity. Questi test vengono eseguiti nella pipeline ogni volta che viene fatto il push di un nuovo commit sulla repository di SapienzaApps, in questo modo si possono trovare subito possibili errori aggiunti durante una modifica al codice. Lo sviluppo di questi test ha anche permesso di portare alla luce bug gi\'a esistenti che erano sfuggiti al testing manuale che era stato fatto fino ad allora.
+
+	\section{Perch\'e usare test automatizzati}
+		Il software testing \`e il processo di eseguire un prodotto software con il fine di determinare se il sistema si comporta come dovrebbe e di identificare possibili malfunzionamenti.
+		Ci\`o pu\`o essere attuato sia manualmente, sia tramite lo sviluppo di strumenti di test automatizzati.
+
+		\paragraph*{}
+		I test automatizzati offrono una serie di vantaggi rispetto a quelli manuali:
+		\begin{itemize}
+			\item Sono riutilizzabili, sia perch\'e danno la possibilit\'a di creare molti test con lo stesso codice a cui si possono apportare piccole modifiche, sia perch\'e permettono di ripetere gli stessi test per un numero arbitrario di volte, avendo la sicurezza di eseguirli sempre nelle stesse condizioni
+			\item Assicurano di venire svolti correttamente rimuovento la possibilit\'a di errore umano durante il loro svolgimento
+			\item Aiutano a testare tutti gli scenari possibili, compresi i casi limite
+			\item Permettono di testare facilmente scenari particolarmente complessi
+			\item Sono eseguibili pi\'u velocemente e pi\'u frequentemente di quelli manuali
+		\end{itemize}
+
+	\section{Tipi di test}
+		I test automatizzati si possono generalmente raggruppare in quattro categorie:
+		\begin{itemize}
+			\item Unit test
+			\item Integration test
+			\item System test
+			\item Acceptance test
+		\end{itemize}
+
+		\begin{figure}[h]
+			\begin{center}
+			\includegraphics[width=0.6\textwidth]{testing.jpg}
+			\captionsetup{justification=centering}
+			\caption{Piramide dei test}
+			\label{fig:8}
+		\end{center}
+		\end{figure}
+
+		\paragraph*{Unit test} Sono quelli che agiscono al pi\'u basso livello, verificano che le singole unit\'a di codice, come funzioni e classi, funzionino correttamente. Sono utili a scovare errori nelle fasi iniziali dello sviluppo, permettendo di correggerli facilmente e riducendo il loro impatto. Dividendo il codice in piccole unit\'a, lo rendono inoltre pi\'u facile da testare. Spesso, per isolare le varie unit\'a, richiedono l'utilizzo di test doubles come mock, stub, etc. Per velocizzarne lo sviluppo si usano di solito test parametrizzati, che permettono con lo stesso codice di testare tutte le combinazioni di input e output attesi.
+
+		In alcune metodologie di sviluppo software, come il test driven design, sono scritti prima ancora di implementare le unit\'a di cui si occupano, in modo da poter definire chiaramente come queste devono comportarsi.
+
+		\paragraph*{Integration test} Operano su un intero componente software costituito da diverse unit\'a che sono gi\'a state testate singolarmente, combinandole e testandole insieme. Permettono quindi di verificare il corretto funzionamento di tale componente e controllare che le varie unit\'a interagiscano tra loro correttamente.
+
+		\paragraph*{System test} Agisce sull'intero sistema software con tutti i suoi componenti completamente integrati. Viene eseguito in condizioni simili a quelle dell'ambiente in cui il software \`e progettato per essere usato. Controlla che il sistema nella sua interezza funzioni correttamente, e che il suo design e comportamento siano quelli definiti nelle specifiche dei requisiti.
+
+		\paragraph*{Acceptance test} \`E l'ultimo stadio del percorso di testing prima di rilasciare il prodotto al pubblico. Tramite l'acceptance testing ci si assicura che il software soddisfi tutti i requisiti prestabiliti.
+
+	\section{Test doubles}
+		Lo scopo dei test automatizzati \`e di verificare parti di codice, e per farlo correttamente \`e bene eliminare tutte le componenti esterne al codice stesso (nel caso di GeneroCity il database e il server MinIO). Usare dei sostituti (\textit{test doubles}) permette di avere diversi vantaggi:
+		\begin{itemize}
+			\item Rimuove il bisogno di avere in esecuzione, durante i test, dei server che possono renderne molto pi\'u dispendioso lo svolgimento. Soprattutto quando questi devono essere eseguiti ogni volta che viene fatto un push sulla repository remota.
+			\item Rimuove il rischio di fallimento delle componenti esterne. Queste non rientrano nell'ambito di ci\`o che deve essere testato, cio\`e il codice
+			\item Offre una migliore gestione di questi componenti, per esempio permette di decidere cosa il database restituir\'a a seconda della query ricevuta
+		\end{itemize}
+
+		\pagebreak
+		Esistono diversi tipi di test doubles, ognuno con il suo campo d'applicazione. Sono riportati di seguito.
+		\paragraph*{Dummy:}
+		Sono la tipologia pi\'u semplice, non hanno alcuna funzionalit\'a e servono solo ad essere passati come parametri che non verranno mai utilizzati
+
+		\paragraph*{Stubs:}
+		Contengono dei dati predefiniti dal test, e restituiscono sempre quelli. Sono utili quando non si ha bisogno di verificare le interazioni con l'oggetto che stanno sostituendo.
+		\vspace*{0.2in}
+		\begin{figure}[h]
+			\begin{center}
+			\includegraphics[width=0.8\textwidth]{stub.png}
+			\captionsetup{justification=centering}
+			\caption{Esempio di funzionamento di uno Stub: restituisce un risultato prestabilito senza interrogare il database}
+			\label{fig:4}
+		\end{center}
+		\end{figure}
+
+		\paragraph*{Spies:}
+		Sono come gli stubs, ma permettono anche di salvare le informazioni ricevute dalla funzione chiamante. Possono esssere usati per esempio per simulare un servizio di email che mantiene il conto di quanti messaggi ha ricevuto.
+		\pagebreak
+		
+		\paragraph*{Fakes:}
+		Hanno un'implementazione funzionante, ma semplificata rispetto a quella degli oggetti che sostituiscono. Sono utili nel caso in cui ci\'o che si vuole simulare deve avere un comportamento stateful, cosa che gli stubs non hanno. Per esempio possono sostituire il comportamento di un database.
+		\vspace*{0.2in}
+		\begin{figure}[h]
+			\begin{center}
+			\includegraphics[width=0.8\textwidth]{fake.png}
+			\captionsetup{justification=centering}
+			\caption{Esempio di funzionamento di un Fake: la sua implementazione usa una semplice hash map al posto del database}
+			\label{fig:6}
+		\end{center}
+		\end{figure}
+
+		\paragraph*{Mocks:}
+		Sono pre-programmati con delle aspettative su come verranno usati e quali valori riceveranno. Nel caso le loro aspettative non vengano soddisfatte, lanciano un errore.
+		La caratteristica che distingue i mock dagli altri test double \`e che i test che li usano rientrano nella categoria del white-box testing, in cui i test conoscono la struttura del codice da testare (visto che \`e l'unico modo per impostare le aspettative). Questo solitamente non \`e auspicabile visto che i test si dovrebbero occupare di verificare la correttezza del codice a prescindere da come \`e implementato.
+		\vspace*{0.2in}
+		\begin{figure}[t]
+			\begin{center}
+			\includegraphics[width=0.8\textwidth]{mock.png}
+			\captionsetup{justification=centering}
+			\caption{Esempio di funzionamento di un Mock: sostituisce il vero oggetto, e controlla se l'azione ricevuta \`e corretta}
+			\label{fig:7}
+		\end{center}
+		\end{figure}
+
+		\pagebreak
+		
+	\section{Approccio utilizzato}
+		Lo scopo principale del mio tirocinio era quello di scrivere dei test per la parte back-end di GeneroCity. In particolare dovevo sviluppare test automatizzati per le componenti che costituiscono la struttura portante del sistema, ovvero le interfacce Router e AppDatabase, che come detto in precedenza lavorano insieme per processare le richieste http, interrogare il database, e preparare le risposte dell'API. 
+
+		\subsection{Idea iniziale}
+		Inizialmente avevo preso la decisione di fare degli unit test per ogni funzione di AppDatabase e per ogni funzione di Router.
+
+		\paragraph*{}
+		In quanto unit test non potevo far usare al Router l'AppDatabase implementato da GeneroCity, quindi ho creato uno stub apposito, in modo da poter testare tutti i comportamenti delle funzioni del Router a seconda di cosa le funzioni di AppDatabase chiamate da loro avrebbero restituito.
+
+		Per i motivi elencati nel paragrafo sui Test Doubles non potevo usare un server di MinIO, sono quindi andato alla ricerca di una libreria che fornisse un mock apposito. Non avendola trovata, ho deciso di scriverne uno io.
+
+		\paragraph*{}
+		Per i test delle funzioni dell'AppDatabase invece, al posto dell'oggetto DB della libreria standard di Go, ho usato un mock fornito dalla libreria go-sqlmock.
+
+		\subsection{Problemi dell'idea iniziale}
+		Scrivendo i test \`e cominciato ad apparire evidente che la maggior parte dei test per AppDatabase sarebbero stati inutili, in quanto molte funzioni erano costituite da semplici sequenze di query sql e non avevano alcuna logica da verificare, se non quella racchiusa nelle query stesse, che per\`o non potevano essere testate, se non attraverso un database di test.
+
+		Inoltre, limitandosi a fare degli unit test, non si poteva controllare che le funzioni del Router e quelle dell'AppDatabase interagissero correttamente.
+
+		\paragraph*{}
+		Un altro problema era che, a causa dell'implementazione della libreria messa a disposizione dagli sviluppatori di MinIO per interfacciarsi al server tramite Go, non era possibile in nessun modo creare un mock.
+
+		\subsection{Soluzione adottata}
+		Ho quindi deciso di scrivere degli integration test verificassero il funzionamento delle intere chiamate API, e che unissero quindi gli unit test delle funzioni del Router e quelli delle corrispondenti funzioni dell'AppDatabase. In questo modo potevo testare sia l'interazione tra funzioni del Router e dell'AppDatabase, sia la correttezza della loro logica, se necessario.
+
+		Per quanto riguarda le parti di codice che interagiscono MinIO invece, mi sono limitato a dare per scontata la loro correttezza. Sono infatti riuscito solo a trovare il modo di creare una sorta di stub del server MinIO che restituisse un codice di successo ad ogni richiesta. In futuro bisogner\'a testarle tramite un server MinIO creato appositamente.
+
+	\section{Strumenti usati per i test}
+		Per la stesura dei test mi sono servito principalmente di due librerie:
+		\begin{itemize}
+			\item testing\cite{ref:testing}
+			\item go-sqlmock\cite{ref:sqlmock}
+		\end{itemize}
+		\paragraph*{testing}
+		\`E contenuta nella libreria standard di Go, fornisce il supporto per creare test automatizzati, subtest, benchmark e offre varie funzionalit\'a basilari.
+		\paragraph*{go-sqlmock}
+		Simula il comportamento del database. Ogni test imposta le query che il mock si deve aspettare, e i risultati che deve restituire. Se durante il test il mock riceve query diverse, nell'ordine sbagliato o non le riceve tutte, il test fallisce.
+
+		Ci\`o significa che la correttezza delle query e del loro ordine non viene testata, e viene data per scontata.
+
+	\section{Struttura dei test}
+		Per evitare eccessive ripetizioni ho usato la tecnica del Table Driven Testing, che consiste, per ogni scenario nel test, nell'avere una tabella che in ogni riga contiene sia i valori da dare in input, sia tutti gli output corrispondenti che ci si aspetta di ricevere. Il test itera sulle righe della tabella ed esegue un subtest per ognuna di esse.
+
+		\paragraph*{}
+		Di seguito riporto come esempio il test per la chiamata GetCars, che restituisce all'utente le informazioni della macchina avente l'id, la targa o il codice MAC dati in input.
+
+		\paragraph*{}
+		I test  sono cos\'i strutturati: si preparano tutti i valori che verranno usati da tutti o la maggior parte dei test.
+
+
+		\lstset{frame=tb,
+		language=Go,
+		aboveskip=6mm,
+		belowskip=6mm,
+		showstringspaces=false,
+		columns=flexible,
+		basicstyle={\fontsize{9}{8}\ttfamily},
+		numbers=none,
+		numberstyle=\tiny\color{gray},
+		keywordstyle=\color{blue},
+		commentstyle=\color{dkgreen},
+		stringstyle=\color{mauve},
+		breaklines=false,
+		breakatwhitespace=true,
+		tabsize=3,
+		framextopmargin=10pt,
+		framexbottommargin=10pt
+	  }
+
+	  \enlargethispage*{2\baselineskip}
+	  \begin{lstlisting}[]
+		func TestGetCars(t *testing.T) {
+			// Prepare variables used by all tests
+			var (
+				uid     = existingUsers[0]
+				cid     = existingCars[1]
+				car, _  = uuid.FromString(cid)
+				size    = float32(4.5)
+				fuel    = 10
+				photo   = ""
+				carInfo = types.CarInfo{
+					Plate: "fg56hil",
+					MAC:   "5c:08:fc:f9:ad:9b",
+					Cid:   car,
+					Make:  "fiat",
+					Model: "punto",
+					Color: "green",
+					Size:  &size,
+					Fuel:  &fuel,
+					Photo: &photo,
+				}
+
+				headers := http.Header{
+					"Accept":         {"application/json"},
+					"X-App-Build":    {"1"},
+					"X-App-Version":  {"1.0.0"},
+					"X-App-Lang":     {"it"},
+					"X-App-Platform": {"android"},
+					"X-Id":           {uid},
+					"Content-Type":   {"application/plain"},
+				}
+			)
+		\end{lstlisting}
+
+		Successivamente si crea la tabella dei test e un ciclo che itera sulle righe della tabella, eseguendo un subtest con i valori di ogni riga.
+
+		\begin{lstlisting}[]
+// Test table
+var tests = map[string]struct {
+	plate                string
+	mac                  string
+	cid                  string
+	carExists            bool
+	expectedResponseCode int
+}{
+	"TEST plate":                	  {"fg56hil", "", "", true, http.StatusOK},
+	"TEST plate does not exist": {"fg56hil", "", "", false, http.StatusNotFound},
+	"TEST mac":                  	  {"", "5c:08:fc:f9:ad:9b", "", true, http.StatusOK},
+	"TEST mac does not exist":   	  {"", "5c:08:fc:f9:ad:9b", "", false, http.StatusNotFound},
+	"TEST cid":                  	  {"", "", cid, true, http.StatusOK},
+	"TEST cid not well formed":  	  {"", "", "not a valid cid", true, http.StatusBadRequest},
+	"TEST cid does not exist":   	  {"", "", cid, false, http.StatusNotFound},
+	"TEST nothing":              	  {"", "", "", false, http.StatusBadRequest},
+}
+for name, test := range tests {
+	t.Run(name, func(t *testing.T) {
+		\end{lstlisting}
+
+		Il subtest, tramite la funzione \textit{getTestRouter} scritta per evitare ripetizioni, crea il Router che si avvarr\'a dell'AppDatabase contenente il mock del database.
+
+		\begin{lstlisting}
+			// Get router, handler and mock db
+			router, mockStruct, err := getTestRouter()
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := router.Handler()
+			mock := mockStruct.mock
+
+			// Close connection at the end of the test
+			defer func() {
+				_ = mockStruct.mockDB.Close()
+				_ = router.Close()
+			}()
+		\end{lstlisting}
+
+		\pagebreak
+		Poi imposta le query che tale mock si deve aspettare e cosa deve restituire. Alcune query per evitare ripetizioni, essendo usate dalla maggior parte dei test, vengono impostate da funzioni apposite. Per esempio la query usata per controllare se un utente esiste viene impostata dalla funzione mockCheckUser. 
+
+		\begin{lstlisting}[breaklines=true,basicstyle={\fontsize{9}{8}\ttfamily}]
+			// Prepare expected db queries and their return values
+			mockCheckUser(mock, uid)
+
+			resCar := carInfo
+			if test.plate != "" {
+				resCar.Plate = test.plate
+				q := mock.ExpectQuery(regexp.QuoteMeta("SELECT cars.cid, cars.plate, cars.make, cars.model, cars.color, cars.size FROM cars, drivers WHERE cars.plate = ? AND drivers.cid = cars.cid AND drivers.tba = 0 LIMIT 1")).
+					WithArgs(test.plate)
+				if test.carExists {
+					q.WillReturnRows(sqlmock.NewRows([]string{"cid", "plate", "make", "model", "color", "size"}).
+						AddRow(cid, resCar.Plate, resCar.Make, resCar.Model, resCar.Color, *resCar.Size))
+				} else {
+					q.WillReturnError(sql.ErrNoRows)
+				}
+			} else if test.mac != "" {
+				resCar.MAC = test.mac
+				q := mock.ExpectQuery(regexp.QuoteMeta("SELECT cars.cid, cars.plate, cars.make, cars.model, cars.color, cars.size FROM cars, drivers WHERE cars.mac = ? AND drivers.cid = cars.cid AND drivers.tba = 0 LIMIT 1")).
+					WithArgs(test.mac)
+				if test.carExists {
+					q.WillReturnRows(sqlmock.NewRows([]string{"cid", "plate", "make", "model", "color", "size"}).
+						AddRow(cid, resCar.Plate, resCar.Make, resCar.Model, resCar.Color, *resCar.Size))
+				} else {
+					q.WillReturnError(sql.ErrNoRows)
+				}
+			} else if test.cid != "" {
+				tCid, err := uuid.FromString(test.cid)
+				if err != nil {
+					resCar.Cid = tCid
+				}
+				q := mock.ExpectQuery(regexp.QuoteMeta("SELECT cars.cid, cars.plate, cars.make, cars.model, cars.color, cars.size, cars.photo, cars.fuel FROM cars, drivers WHERE cars.cid = ? AND drivers.cid = cars.cid AND drivers.tba = 0 LIMIT 1")).
+					WithArgs(cid)
+				if test.carExists {
+					q.WillReturnRows(sqlmock.NewRows([]string{"cid", "plate", "make", "model", "color", "size", "photo", "fuel"}).
+						AddRow(cid, resCar.Plate, resCar.Make, resCar.Model, resCar.Color, *resCar.Size, *resCar.Photo, *resCar.Fuel))
+				} else {
+					q.WillReturnError(sql.ErrNoRows)
+				}
+			}
+		\end{lstlisting}
+
+		Successivamente il subtest prepara l'url e il body (se necessario) della richiesta http relativa alla chiamata API da testare, ed  esegue la richiesta http passandola direttamente all'handler del router, in modo da evitare di dover avviare un server che la debba ricevere.
+
+		\enlargethispage*{2\baselineskip}
+		\begin{lstlisting}[breaklines=true]
+			// Prepare request
+			url := fmt.Sprintf("/car/?cid=%s&plate=%s&mac=%s", test.cid, test.plate, test.mac)
+			var body io.Reader = nil
+			req, _ := http.NewRequest("GET", url, body)
+			req.RequestURI = url
+			req.Header = headers
+
+			// Make request, get response
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+		\end{lstlisting}
+
+		Infine controlla che la risposta contenga gli stessi valori attesi dal subtest. Se i risultati non sono corretti, le funzioni vanno in errore o le query ricevute dal mock database non sono quelle impostate, il subtest fallisce.
+
+		\begin{lstlisting}[framexbottommargin=5pt]
+			// Check response code and body
+			if response.Code != test.expectedResponseCode {
+				t.Fatalf("Wrong response code: %d", response.Code)
+			}
+			if test.expectedResponseCode == http.StatusOK {
+				var res types.CarInfo
+				err = json.Unmarshal(response.Body.Bytes(), &res)
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch {
+				case res.Plate != resCar.Plate:
+					t.Fatalf("Plate %s != %s", res.Plate, resCar.Plate)
+				case res.MAC != resCar.MAC:
+					t.Fatalf("MAC %s != %s", res.MAC, resCar.MAC)
+				case res.Cid.String() != resCar.Cid.String():
+					t.Fatalf("Cid %s != %s", res.Cid.String(), resCar.Cid.String())
+				case res.Make != resCar.Make:
+					t.Fatalf("Make %s != %s", res.Make, resCar.Make)
+				case res.Model != resCar.Model:
+					t.Fatalf("Model %s != %s", res.Model, resCar.Model)
+				case res.Color != resCar.Color:
+					t.Fatalf("Color %s != %s", res.Color, resCar.Color)
+				case *res.Size != *resCar.Size:
+					t.Fatalf("Plate %f != %f", *res.Size, *resCar.Size)
+				case *res.Fuel != *resCar.Fuel:
+					t.Fatalf("Fuel %d != %d", *res.Fuel, *resCar.Fuel)
+				case *res.Photo != *resCar.Photo:
+					t.Fatalf("Photo %s != %s", *res.Photo, *resCar.Photo)
+				}
+			}
+		})
+	}
+}
+		\end{lstlisting}
+
+
+% -------------
+% CHAPTER 7
+% -------------
+\chapter{Conclusioni}
+\section{Errori emersi grazie alla stesura dei test}
+		Essendo il codice per cui andavano scritti i test automatici gi\'a stato collaudato manualmente, non mi aspettavo di trovare grandi errori. Come gi\'a detto questi test serviranno principalmente per assicurarsi che future modifiche non danneggino il codice gi\'a esistente e funzionante.
+
+		Nonostante ci\'o, alcuni errori relativi al controllo dei permessi sono venuti alla luce: alcune chiamate API relative alla macchina (come per esempio get-car-statistics, usata per ottenere le statistiche di una macchina) controllano che chi ha fatto la richiesta ne sia il proprietario o il guidatore, a seconda della chiamata. In alcune funzioni si controllava che la richiesta venisse fatta dal guidatore della macchina, mentre si sarebbe dovuto controllare che venisse fatta dal proprietario della macchina; in altre funzioni tale controllo veniva fatto invece erroneamente.
+
+	\section{Possibili futuri miglioramenti}
+		In futuro potrebbe essere utile scrivere dei test che interagiscano con un database di test per poter controllare la correttezza delle query usate. Probabilmente questi non saranno eseguiti ad ogni push dei cambiamenti, ma manualmente, solo quando ce ne sar\'a bisogno, in modo da non appesantire inutilmente il server di SapienzaApps. Lo stesso si pu\`o dire per le parti di codice che interagiscono con MinIO.
+
+\backmatter
+
+\phantomsection
+\begin{thebibliography}{9}
+
+\bibitem{ref:minio}
+MinIO \url{https://en.wikipedia.org/wiki/MinIO}
+
+\bibitem{ref:testing}
+Package Go /dev/testing https://pkg.go.dev/testing
+
+\bibitem{ref:sqlmock}
+Package go-sqlmock https://github.com/DATA-DOG/go-sqlmock
+
+\end{thebibliography}
+
+\end{document}
